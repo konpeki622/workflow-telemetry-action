@@ -6308,8 +6308,8 @@ function reportWorkflowMetrics() {
         if (userTable || systemTable) {
             postContentItems.push('### CPU Statistics', (0, markdown_table_1.markdownTable)([
                 ['type', 'max', 'avg'],
-                ['user', userTable.max.toString(), userTable.avg],
-                ['system', systemTable.max.toString(), systemTable.avg]
+                ['user', userTable.max.toFixed(2), userTable.avg],
+                ['system', systemTable.max.toFixed(2), systemTable.avg]
             ]));
         }
         if (memoryUsage) {
@@ -6336,8 +6336,9 @@ function getCPUStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = (0, dayjs_1.default)(response.data[0], 'mm:ss:SS').unix();
-        const endTime = (0, dayjs_1.default)(response.data[response.data.length - 1], 'mm:ss:SS').unix();
+        logger.info(`Got CPU stats: ${JSON.stringify(response.data)}`);
+        const startTime = (0, dayjs_1.default)(response.data[0], 'HH:mm:ss').unix();
+        const endTime = (0, dayjs_1.default)(response.data[response.data.length - 1], 'HH:mm:ss').unix();
         const duration = endTime - startTime;
         let maxUserValue = 0;
         let sumUserValue = 0;
