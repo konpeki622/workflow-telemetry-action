@@ -49,7 +49,7 @@ async function reportWorkflowMetrics(): Promise<string> {
       core.warning(`Invalid theme: ${theme}`)
   }
 
-  const { userLoadX, systemLoadX, tableContent } = await getCPUStats()
+  const { userLoadX, systemLoadX, tableContent : cpuTableContent } = await getCPUStats()
   const { activeMemoryX, availableMemoryX } = await getMemoryStats()
   const { networkReadX, networkWriteX } = await getNetworkStats()
   const { diskReadX, diskWriteX } = await getDiskStats()
@@ -156,9 +156,11 @@ async function reportWorkflowMetrics(): Promise<string> {
       `![${cpuLoad.id}](${cpuLoad.url})`,
       ''
     )
+  }
+  if (cpuTableContent) {
     postContentItems.push(
       '### CPU Statistics',
-      markdownTable(tableContent)
+      markdownTable(cpuTableContent)
     )
   }
   if (memoryUsage) {
@@ -200,8 +202,8 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = response.data[0]
-  const endTime: number = response.data[response.data.length - 1]
+  const startTime: number = response.data[0].time
+  const endTime: number = response.data[response.data.length - 1].time
   const duration: number = Math.round((endTime - startTime) / 1000) // ms -> s
 
   let maxUserValue: number = 0
@@ -235,6 +237,7 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
   tableContent.push(['maxValue', maxUserValue.toFixed(2), maxSystemValue.toFixed(2)])
   tableContent.push(['avgValue', (sumUserValue / duration).toFixed(2), (sumSystemValue / duration).toFixed(2)])
 
+  logger.info(tableContent.toString())
   return { userLoadX, systemLoadX, tableContent }
 }
 

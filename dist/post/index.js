@@ -32082,7 +32082,7 @@ function reportWorkflowMetrics() {
             default:
                 core.warning(`Invalid theme: ${theme}`);
         }
-        const { userLoadX, systemLoadX, tableContent } = yield getCPUStats();
+        const { userLoadX, systemLoadX, tableContent: cpuTableContent } = yield getCPUStats();
         const { activeMemoryX, availableMemoryX } = yield getMemoryStats();
         const { networkReadX, networkWriteX } = yield getNetworkStats();
         const { diskReadX, diskWriteX } = yield getDiskStats();
@@ -32172,7 +32172,9 @@ function reportWorkflowMetrics() {
         const postContentItems = [];
         if (cpuLoad) {
             postContentItems.push('### CPU Metrics', `![${cpuLoad.id}](${cpuLoad.url})`, '');
-            postContentItems.push('### CPU Statistics', (0, markdown_table_1.markdownTable)(tableContent));
+        }
+        if (cpuTableContent) {
+            postContentItems.push('### CPU Statistics', (0, markdown_table_1.markdownTable)(cpuTableContent));
         }
         if (memoryUsage) {
             postContentItems.push('### Memory Metrics', `![${memoryUsage.id}](${memoryUsage.url})`, '');
@@ -32199,8 +32201,8 @@ function getCPUStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = response.data[0];
-        const endTime = response.data[response.data.length - 1];
+        const startTime = response.data[0].time;
+        const endTime = response.data[response.data.length - 1].time;
         const duration = Math.round((endTime - startTime) / 1000); // ms -> s
         let maxUserValue = 0;
         let sumUserValue = 0;
@@ -32227,6 +32229,7 @@ function getCPUStats() {
         });
         tableContent.push(['maxValue', maxUserValue.toFixed(2), maxSystemValue.toFixed(2)]);
         tableContent.push(['avgValue', (sumUserValue / duration).toFixed(2), (sumSystemValue / duration).toFixed(2)]);
+        logger.info(tableContent.toString());
         return { userLoadX, systemLoadX, tableContent };
     });
 }
