@@ -34,9 +34,16 @@ export interface ProcessedStats {
   readonly y: number
 }
 
+export interface ProcessedTableStats {
+  readonly max: number
+  readonly avg: string
+}
+
 export interface ProcessedCPUStats {
   readonly userLoadX: ProcessedStats[]
   readonly systemLoadX: ProcessedStats[]
+  readonly userTable: ProcessedTableStats
+  readonly systemTable: ProcessedTableStats
 }
 
 export interface ProcessedMemoryStats {

@@ -14,15 +14,21 @@ import {
   ProcessedMemoryStats,
   ProcessedNetworkStats,
   ProcessedStats,
+  ProcessedTableStats,
   StackedAreaGraphOptions,
   WorkflowJobType
 } from './interfaces'
 import * as logger from './logger'
+import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+import { markdownTable } from 'markdown-table'
 
 const STAT_SERVER_PORT = 7777
 
 const BLACK = '#000000'
 const WHITE = '#FFFFFF'
+
+dayjs.extend(customParseFormat)
 
 async function triggerStatCollect(): Promise<void> {
   logger.debug('Triggering stat collect ...')
@@ -48,7 +54,7 @@ async function reportWorkflowMetrics(): Promise<string> {
       core.warning(`Invalid theme: ${theme}`)
   }
 
-  const { userLoadX, systemLoadX } = await getCPUStats()
+  const { userLoadX, systemLoadX, userTable, systemTable } = await getCPUStats()
   const { activeMemoryX, availableMemoryX } = await getMemoryStats()
   const { networkReadX, networkWriteX } = await getNetworkStats()
   const { diskReadX, diskWriteX } = await getDiskStats()
@@ -156,6 +162,16 @@ async function reportWorkflowMetrics(): Promise<string> {
       ''
     )
   }
+  if (userTable || systemTable) {
+    postContentItems.push(
+      '### CPU Statistics',
+      markdownTable([
+        ['type', 'max', 'avg'],
+        ['user', userTable.max.toString(), userTable.avg],
+        ['system', systemTable.max.toString(), systemTable.avg]
+      ])
+    )
+  }
   if (memoryUsage) {
     postContentItems.push(
       '### Memory Metrics',
@@ -194,19 +210,36 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
 
+  const startTime: number = dayjs(response.data[0], 'mm:ss:SS').unix()
+  const endTime: number = dayjs(response.data[response.data.length - 1], 'mm:ss:SS').unix()
+  const duration: number = endTime - startTime
+
+  let maxUserValue: number = 0
+  let sumUserValue: number = 0
+  let maxSystemValue: number = 0
+  let sumSystemValue: number = 0
+
   response.data.forEach((element: CPUStats) => {
     userLoadX.push({
       x: element.time,
       y: element.userLoad && element.userLoad > 0 ? element.userLoad : 0
     })
 
+    maxUserValue = Math.max(maxUserValue, element.userLoad)
+    sumUserValue += element.userLoad && element.userLoad > 0 ? element.userLoad : 0
+
     systemLoadX.push({
       x: element.time,
       y: element.systemLoad && element.systemLoad > 0 ? element.systemLoad : 0
     })
-  })
 
-  return { userLoadX, systemLoadX }
+    maxSystemValue = Math.max(maxSystemValue, element.systemLoad)
+    sumSystemValue += element.systemLoad && element.systemLoad > 0 ? element.systemLoad : 0
+  })
+  
+  const userTable: ProcessedTableStats = { max: maxUserValue, avg: (sumUserValue / duration).toFixed(2) }
+  const systemTable: ProcessedTableStats = { max: maxSystemValue, avg: (sumSystemValue / duration).toFixed(2) }
+  return { userLoadX, systemLoadX, userTable, systemTable }
 }
 
 async function getMemoryStats(): Promise<ProcessedMemoryStats> {
