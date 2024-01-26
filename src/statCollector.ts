@@ -167,8 +167,8 @@ async function reportWorkflowMetrics(): Promise<string> {
       '### CPU Statistics',
       markdownTable([
         ['type', 'max', 'avg'],
-        ['user', userTable.max.toString(), userTable.avg],
-        ['system', systemTable.max.toString(), systemTable.avg]
+        ['user', userTable.max.toFixed(2), userTable.avg],
+        ['system', systemTable.max.toFixed(2), systemTable.avg]
       ])
     )
   }
@@ -209,9 +209,10 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
   if (logger.isDebugEnabled()) {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
+  logger.info(`Got CPU stats: ${JSON.stringify(response.data)}`)
 
-  const startTime: number = dayjs(response.data[0], 'mm:ss:SS').unix()
-  const endTime: number = dayjs(response.data[response.data.length - 1], 'mm:ss:SS').unix()
+  const startTime: number = dayjs(response.data[0], 'HH:mm:ss').unix()
+  const endTime: number = dayjs(response.data[response.data.length - 1], 'HH:mm:ss').unix()
   const duration: number = endTime - startTime
 
   let maxUserValue: number = 0
