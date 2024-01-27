@@ -32210,13 +32210,16 @@ function getCPUStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = response.data[0].time;
+        let startTime = 0;
         let maxUserValue = 0;
         let sumUserValue = 0;
         let maxSystemValue = 0;
         let sumSystemValue = 0;
         cpuTableContent.push(['Time', 'Value(user)', 'Value(system)']); // header
-        response.data.forEach((element) => {
+        response.data.forEach((element, index) => {
+            if (index === 0) {
+                startTime = element.time;
+            }
             const userLoad = element.userLoad && element.userLoad > 0 ? element.userLoad : 0;
             userLoadX.push({
                 x: element.time,
@@ -32249,13 +32252,16 @@ function getMemoryStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = response.data[0].time;
+        let startTime = 0;
         let maxUsedValue = 0;
         let sumUsedValue = 0;
         let totalMemoryMb = 0;
         let sumTotalMemoryMb = 0; // to calculate average value
-        memoryTableContent.push(['Time', 'Usage', 'Rate']); // header
-        response.data.forEach((element) => {
+        memoryTableContent.push(['Time', 'Usage', 'Percentage']); // header
+        response.data.forEach((element, index) => {
+            if (index === 0) {
+                startTime = element.time;
+            }
             const activeMemoryMb = element.activeMemoryMb && element.activeMemoryMb > 0 ? element.activeMemoryMb : 0;
             activeMemoryX.push({
                 x: element.time,
@@ -32289,11 +32295,14 @@ function getNetworkStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got network stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = response.data[0].time;
+        let startTime = 0;
         let maxReadValue = 0;
         let maxWriteValue = 0;
         networkTableContent.push(['Time', 'Read', 'Write']); // header
-        response.data.forEach((element) => {
+        response.data.forEach((element, index) => {
+            if (index === 0) {
+                startTime = element.time;
+            }
             const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0;
             networkReadX.push({
                 x: element.time,
@@ -32323,11 +32332,14 @@ function getDiskStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = response.data[0].time;
+        let startTime = 0;
         let maxReadValue = 0;
         let maxWriteValue = 0;
         diskTableContent.push(['Time', 'Read', 'Write']); // header
-        response.data.forEach((element) => {
+        response.data.forEach((element, index) => {
+            if (index === 0) {
+                startTime = element.time;
+            }
             const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0;
             diskReadX.push({
                 x: element.time,

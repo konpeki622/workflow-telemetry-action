@@ -217,14 +217,17 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = response.data[0].time
+  let startTime: number = 0
   let maxUserValue: number = 0
   let sumUserValue: number = 0
   let maxSystemValue: number = 0
   let sumSystemValue: number = 0
 
   cpuTableContent.push(['Time', 'Value(user)', 'Value(system)']) // header
-  response.data.forEach((element: CPUStats) => {
+  response.data.forEach((element: CPUStats, index: number) => {
+    if (index === 0) {
+      startTime = element.time
+    }
     const userLoad: number = element.userLoad && element.userLoad > 0 ? element.userLoad : 0
     userLoadX.push({
       x: element.time,
@@ -264,14 +267,17 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
     logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = response.data[0].time
+  let startTime: number = 0
   let maxUsedValue: number = 0
   let sumUsedValue: number = 0
   let totalMemoryMb: number = 0
   let sumTotalMemoryMb: number = 0 // to calculate average value
 
-  memoryTableContent.push(['Time', 'Usage', 'Rate']) // header
-  response.data.forEach((element: MemoryStats) => {
+  memoryTableContent.push(['Time', 'Usage', 'Percentage']) // header
+  response.data.forEach((element: MemoryStats, index: number) => {
+    if (index === 0) {
+      startTime = element.time
+    }
     const activeMemoryMb = element.activeMemoryMb && element.activeMemoryMb > 0 ? element.activeMemoryMb : 0
     activeMemoryX.push({
       x: element.time,
@@ -313,12 +319,15 @@ async function getNetworkStats(): Promise<ProcessedNetworkStats> {
     logger.debug(`Got network stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = response.data[0].time
+  let startTime: number = 0
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
 
   networkTableContent.push(['Time', 'Read', 'Write']) // header
-  response.data.forEach((element: NetworkStats) => {
+  response.data.forEach((element: NetworkStats, index: number) => {
+    if (index === 0) {
+      startTime = element.time
+    }
     const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0
     networkReadX.push({
       x: element.time,
@@ -352,12 +361,15 @@ async function getDiskStats(): Promise<ProcessedDiskStats> {
     logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = response.data[0].time
+  let startTime: number = 0
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
 
   diskTableContent.push(['Time', 'Read', 'Write']) // header
-  response.data.forEach((element: DiskStats) => {
+  response.data.forEach((element: DiskStats, index: number) => {
+    if (index === 0) {
+      startTime = element.time
+    }
     const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0
     diskReadX.push({
       x: element.time,
