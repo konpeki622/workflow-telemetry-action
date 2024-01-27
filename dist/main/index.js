@@ -22317,10 +22317,10 @@ function reportWorkflowMetrics() {
             default:
                 core.warning(`Invalid theme: ${theme}`);
         }
-        const { userLoadX, systemLoadX, tableContent: cpuTableContent } = yield getCPUStats();
-        const { activeMemoryX, availableMemoryX } = yield getMemoryStats();
-        const { networkReadX, networkWriteX } = yield getNetworkStats();
-        const { diskReadX, diskWriteX } = yield getDiskStats();
+        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats();
+        const { activeMemoryX, availableMemoryX, memoryTableContent } = yield getMemoryStats();
+        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats();
+        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats();
         const cpuLoad = userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
             ? yield getStackedAreaGraph({
                 label: 'CPU Load (%)',
@@ -22409,10 +22409,13 @@ function reportWorkflowMetrics() {
             postContentItems.push('### CPU Metrics', `![${cpuLoad.id}](${cpuLoad.url})`, '');
         }
         if (cpuTableContent) {
-            postContentItems.push('### CPU Statistics', (0, markdown_table_1.markdownTable)(cpuTableContent));
+            postContentItems.push((0, markdown_table_1.markdownTable)(cpuTableContent));
         }
         if (memoryUsage) {
             postContentItems.push('### Memory Metrics', `![${memoryUsage.id}](${memoryUsage.url})`, '');
+        }
+        if (memoryTableContent) {
+            postContentItems.push((0, markdown_table_1.markdownTable)(memoryTableContent));
         }
         if ((networkIORead && networkIOWrite) || (diskIORead && diskIOWrite)) {
             postContentItems.push('### IO Metrics', '|               | Read      | Write     |', '|---            |---        |---        |');
@@ -22423,6 +22426,12 @@ function reportWorkflowMetrics() {
         if (diskIORead && diskIOWrite) {
             postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
+        if (networkTableContent) {
+            postContentItems.push('### Network I/O details', (0, markdown_table_1.markdownTable)(networkTableContent));
+        }
+        if (diskTableContent) {
+            postContentItems.push('### Disk I/O details', (0, markdown_table_1.markdownTable)(diskTableContent));
+        }
         return postContentItems.join('\n');
     });
 }
@@ -22430,20 +22439,18 @@ function getCPUStats() {
     return __awaiter(this, void 0, void 0, function* () {
         const userLoadX = [];
         const systemLoadX = [];
-        const tableContent = [];
+        const cpuTableContent = [];
         logger.debug('Getting CPU stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/cpu`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
         const startTime = response.data[0].time;
-        const endTime = response.data[response.data.length - 1].time;
-        const duration = Math.round((endTime - startTime) / 1000); // ms -> s
         let maxUserValue = 0;
         let sumUserValue = 0;
         let maxSystemValue = 0;
         let sumSystemValue = 0;
-        tableContent.push(['Time', 'Value(user)', 'Value(system)']); // header
+        cpuTableContent.push(['Time', 'Value(user)', 'Value(system)']); // header
         response.data.forEach((element) => {
             const userLoad = element.userLoad && element.userLoad > 0 ? element.userLoad : 0;
             userLoadX.push({
@@ -22460,29 +22467,34 @@ function getCPUStats() {
             maxSystemValue = Math.max(maxSystemValue, element.systemLoad);
             sumSystemValue += systemLoad;
             const currentTime = Math.round((element.time - startTime) / 1000).toString();
-            tableContent.push([currentTime, userLoad.toString(), systemLoad.toString()]);
+            cpuTableContent.push([`${currentTime}s`, `${userLoad.toFixed(2)}%`, `${systemLoad.toFixed(2)}%`]);
         });
-        tableContent.push(['maxValue', maxUserValue.toFixed(2), maxSystemValue.toFixed(2)]);
-        tableContent.push(['avgValue', (sumUserValue / duration).toFixed(2), (sumSystemValue / duration).toFixed(2)]);
-        logger.info(tableContent.toString());
-        return { userLoadX, systemLoadX, tableContent };
+        cpuTableContent.push(['**Max**', `**${maxUserValue.toFixed(2)}%**`, `**${maxSystemValue.toFixed(2)}%**`]);
+        cpuTableContent.push(['**Avg**', `**${(sumUserValue / response.data.length).toFixed(2)}%**`, `**${(sumSystemValue / response.data.length).toFixed(2)}%**`]);
+        return { userLoadX, systemLoadX, cpuTableContent };
     });
 }
 function getMemoryStats() {
     return __awaiter(this, void 0, void 0, function* () {
         const activeMemoryX = [];
         const availableMemoryX = [];
+        const memoryTableContent = [];
         logger.debug('Getting memory stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/memory`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`);
         }
+        const startTime = response.data[0].time;
+        let maxUsedValue = 0;
+        let sumUsedValue = 0;
+        let totalMemoryMb = 0;
+        let sumTotalMemoryMb = 0; // to calculate average value
+        memoryTableContent.push(['Time', 'Usage', 'Rate']); // header
         response.data.forEach((element) => {
+            const activeMemoryMb = element.activeMemoryMb && element.activeMemoryMb > 0 ? element.activeMemoryMb : 0;
             activeMemoryX.push({
                 x: element.time,
-                y: element.activeMemoryMb && element.activeMemoryMb > 0
-                    ? element.activeMemoryMb
-                    : 0
+                y: activeMemoryMb
             });
             availableMemoryX.push({
                 x: element.time,
@@ -22490,52 +22502,84 @@ function getMemoryStats() {
                     ? element.availableMemoryMb
                     : 0
             });
+            maxUsedValue = Math.max(maxUsedValue, activeMemoryMb);
+            sumUsedValue += activeMemoryMb;
+            totalMemoryMb = Math.max(totalMemoryMb, element.totalMemoryMb);
+            sumTotalMemoryMb += totalMemoryMb;
+            const currentTime = Math.round((element.time - startTime) / 1000).toString();
+            memoryTableContent.push([`${currentTime}s`, `${activeMemoryMb.toFixed(2)}M`, `${(activeMemoryMb / element.totalMemoryMb).toFixed(2)}%`]);
         });
-        return { activeMemoryX, availableMemoryX };
+        memoryTableContent.push(['**Max**', `**${maxUsedValue.toFixed(2)}M**`, `**${(maxUsedValue / totalMemoryMb).toFixed(2)}%**`]);
+        memoryTableContent.push(['**Avg**', `**${(sumUsedValue / response.data.length).toFixed(2)}M**`, `**${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%**`]);
+        return { activeMemoryX, availableMemoryX, memoryTableContent };
     });
 }
 function getNetworkStats() {
     return __awaiter(this, void 0, void 0, function* () {
         const networkReadX = [];
         const networkWriteX = [];
+        const networkTableContent = [];
         logger.debug('Getting network stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/network`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got network stats: ${JSON.stringify(response.data)}`);
         }
+        const startTime = response.data[0].time;
+        let maxReadValue = 0;
+        let maxWriteValue = 0;
+        networkTableContent.push(['Time', 'Read', 'Write']); // header
         response.data.forEach((element) => {
+            const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0;
             networkReadX.push({
                 x: element.time,
-                y: element.rxMb && element.rxMb > 0 ? element.rxMb : 0
+                y: rxMb
             });
+            const txMb = element.txMb && element.txMb > 0 ? element.txMb : 0;
             networkWriteX.push({
                 x: element.time,
-                y: element.txMb && element.txMb > 0 ? element.txMb : 0
+                y: txMb
             });
+            maxReadValue = Math.max(maxReadValue, element.rxMb);
+            maxWriteValue = Math.max(maxWriteValue, element.txMb);
+            const currentTime = Math.round((element.time - startTime) / 1000).toString();
+            networkTableContent.push([`${currentTime}s`, `${rxMb.toFixed(2)}M`, `${txMb.toFixed(2)}M`]);
         });
-        return { networkReadX, networkWriteX };
+        networkTableContent.push(['**Max**', `**${maxReadValue.toFixed(2)}M**`, `**${maxWriteValue.toFixed(2)}M**`]);
+        return { networkReadX, networkWriteX, networkTableContent };
     });
 }
 function getDiskStats() {
     return __awaiter(this, void 0, void 0, function* () {
         const diskReadX = [];
         const diskWriteX = [];
+        const diskTableContent = [];
         logger.debug('Getting disk stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/disk`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`);
         }
+        const startTime = response.data[0].time;
+        let maxReadValue = 0;
+        let maxWriteValue = 0;
+        diskTableContent.push(['Time', 'Read', 'Write']); // header
         response.data.forEach((element) => {
+            const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0;
             diskReadX.push({
                 x: element.time,
-                y: element.rxMb && element.rxMb > 0 ? element.rxMb : 0
+                y: rxMb
             });
+            const wxMb = element.wxMb && element.wxMb > 0 ? element.wxMb : 0;
             diskWriteX.push({
                 x: element.time,
-                y: element.wxMb && element.wxMb > 0 ? element.wxMb : 0
+                y: wxMb
             });
+            maxReadValue = Math.max(maxReadValue, element.rxMb);
+            maxWriteValue = Math.max(maxWriteValue, element.wxMb);
+            const currentTime = Math.round((element.time - startTime) / 1000).toString();
+            diskTableContent.push([`${currentTime}s`, `${rxMb.toFixed(2)}M`, `${wxMb.toFixed(2)}M`]);
         });
-        return { diskReadX, diskWriteX };
+        diskTableContent.push(['**Max**', `**${maxReadValue.toFixed(2)}M**`, `**${maxWriteValue.toFixed(2)}M**`]);
+        return { diskReadX, diskWriteX, diskTableContent };
     });
 }
 function getLineGraph(options) {

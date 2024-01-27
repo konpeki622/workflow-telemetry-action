@@ -37,22 +37,25 @@ export interface ProcessedStats {
 export interface ProcessedCPUStats {
   readonly userLoadX: ProcessedStats[]
   readonly systemLoadX: ProcessedStats[]
-  readonly tableContent: string[][]
+  readonly cpuTableContent: string[][]
 }
 
 export interface ProcessedMemoryStats {
   readonly activeMemoryX: ProcessedStats[]
   readonly availableMemoryX: ProcessedStats[]
+  readonly memoryTableContent: string[][]
 }
 
 export interface ProcessedNetworkStats {
   readonly networkReadX: ProcessedStats[]
   readonly networkWriteX: ProcessedStats[]
+  readonly networkTableContent: string[][]
 }
 
 export interface ProcessedDiskStats {
   readonly diskReadX: ProcessedStats[]
   readonly diskWriteX: ProcessedStats[]
+  readonly diskTableContent: string[][]
 }
 
 export interface LineGraphOptions {
