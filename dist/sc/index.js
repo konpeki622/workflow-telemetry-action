@@ -6123,193 +6123,6 @@ exports.error = error;
 
 /***/ }),
 
-/***/ 9576:
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __asyncValues = (this && this.__asyncValues) || function (o) {
-    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-    var m = o[Symbol.asyncIterator], i;
-    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
-    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
-    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.parse = void 0;
-const fs = __importStar(__webpack_require__(5747));
-const readline = __importStar(__webpack_require__(1058));
-const logger = __importStar(__webpack_require__(4636));
-const SYS_PROCS_TO_BE_IGNORED = new Set([
-    'awk',
-    'basename',
-    'cat',
-    'cut',
-    'date',
-    'echo',
-    'envsubst',
-    'expr',
-    'dirname',
-    'grep',
-    'head',
-    'id',
-    'ip',
-    'ln',
-    'ls',
-    'lsblk',
-    'mkdir',
-    'mktemp',
-    'mv',
-    'ps',
-    'readlink',
-    'rm',
-    'sed',
-    'seq',
-    'sh',
-    'uname',
-    'whoami'
-]);
-function parse(filePath, procEventParseOptions) {
-    var e_1, _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        const minDuration = (procEventParseOptions && procEventParseOptions.minDuration) || -1;
-        const traceSystemProcesses = (procEventParseOptions && procEventParseOptions.traceSystemProcesses) ||
-            false;
-        const fileStream = fs.createReadStream(filePath);
-        const rl = readline.createInterface({
-            input: fileStream,
-            crlfDelay: Infinity
-        });
-        // Note: we use the crlfDelay option to recognize all instances of CR LF
-        // ('\r\n') in input file as a single line break.
-        const activeCommands = new Map();
-        const replacedCommands = new Map();
-        const completedCommands = [];
-        let commandOrder = 0;
-        try {
-            for (var rl_1 = __asyncValues(rl), rl_1_1; rl_1_1 = yield rl_1.next(), !rl_1_1.done;) {
-                let line = rl_1_1.value;
-                line = line.trim();
-                if (!line || !line.length) {
-                    continue;
-                }
-                try {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(`Parsing trace process event: ${line}`);
-                    }
-                    const event = JSON.parse(line);
-                    event.order = ++commandOrder;
-                    if (!traceSystemProcesses && SYS_PROCS_TO_BE_IGNORED.has(event.name)) {
-                        continue;
-                    }
-                    if ('EXEC' === event.event) {
-                        const existingCommand = activeCommands.get(event.pid);
-                        activeCommands.set(event.pid, event);
-                        if (existingCommand) {
-                            replacedCommands.set(event.pid, existingCommand);
-                        }
-                    }
-                    else if ('EXIT' === event.event) {
-                        let activeCommandCompleted = false;
-                        let replacedCommandCompleted = false;
-                        // Process active command
-                        const activeCommand = activeCommands.get(event.pid);
-                        activeCommands.delete(event.pid);
-                        if (activeCommand) {
-                            for (let key of Object.keys(event)) {
-                                if (!activeCommand.hasOwnProperty(key)) {
-                                    activeCommand[key] = event[key];
-                                }
-                            }
-                            activeCommandCompleted = true;
-                        }
-                        // Process replaced command if there is
-                        const replacedCommand = replacedCommands.get(event.pid);
-                        replacedCommands.delete(event.pid);
-                        if (replacedCommand && activeCommandCompleted) {
-                            for (let key of Object.keys(event)) {
-                                if (!replacedCommand.hasOwnProperty(key)) {
-                                    replacedCommand[key] = event[key];
-                                }
-                            }
-                            const finishTime = activeCommand.startTime + activeCommand.duration;
-                            replacedCommand.duration = finishTime - replacedCommand.startTime;
-                            replacedCommandCompleted = true;
-                        }
-                        // Complete the replaced command first if there is
-                        if (replacedCommandCompleted &&
-                            replacedCommand.duration > minDuration) {
-                            completedCommands.push(replacedCommand);
-                        }
-                        // Then complete the actual command
-                        if (activeCommandCompleted && activeCommand.duration > minDuration) {
-                            completedCommands.push(activeCommand);
-                        }
-                    }
-                    else {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug(`Unknown trace process event: ${line}`);
-                        }
-                    }
-                }
-                catch (error) {
-                    logger.debug(`Unable to parse process trace event (${error}): ${line}`);
-                }
-            }
-        }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-        finally {
-            try {
-                if (rl_1_1 && !rl_1_1.done && (_a = rl_1.return)) yield _a.call(rl_1);
-            }
-            finally { if (e_1) throw e_1.error; }
-        }
-        completedCommands.sort((a, b) => {
-            return a.startTime - b.startTime;
-        });
-        if (logger.isDebugEnabled()) {
-            logger.debug(`Completed commands: ${JSON.stringify(completedCommands)}`);
-        }
-        return completedCommands;
-    });
-}
-exports.parse = parse;
-
-
-/***/ }),
-
 /***/ 6451:
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
@@ -6358,7 +6171,6 @@ const axios_1 = __importDefault(__webpack_require__(1441));
 const core = __importStar(__webpack_require__(2186));
 const logger = __importStar(__webpack_require__(4636));
 const markdown_table_1 = __webpack_require__(1062);
-const procTraceParser_1 = __webpack_require__(9576);
 const STAT_SERVER_PORT = 7777;
 const BLACK = '#000000';
 const WHITE = '#FFFFFF';
@@ -6371,9 +6183,15 @@ function triggerStatCollect() {
         }
     });
 }
-// konpeki622: display `Performance Statistics`
-function reportWorkflowMetrics() {
+// @konpeki622: display `Performance Statistics`
+function reportWorkflowMetrics(job) {
+    var _a;
     return __awaiter(this, void 0, void 0, function* () {
+        const testJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === 'Run test');
+        if (!testJob) {
+            logger.error('No test Job.');
+            return '';
+        }
         const theme = core.getInput('theme', { required: false });
         let axisColor = BLACK;
         switch (theme) {
@@ -6386,18 +6204,10 @@ function reportWorkflowMetrics() {
             default:
                 core.warning(`Invalid theme: ${theme}`);
         }
-        const hyperfineCommand = yield getHyperfineCommand();
-        if (!hyperfineCommand) {
-            logger.error(`Failed to get hyperfine command.`);
-            return '';
-        }
-        if (logger.isDebugEnabled()) {
-            logger.debug(JSON.stringify(hyperfineCommand));
-        }
-        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats(hyperfineCommand);
-        const { activeMemoryX, memoryTableContent } = yield getMemoryStats(hyperfineCommand);
-        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats(hyperfineCommand);
-        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats(hyperfineCommand);
+        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats(testJob);
+        const { activeMemoryX, memoryTableContent } = yield getMemoryStats(testJob);
+        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats(testJob);
+        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats(testJob);
         const cpuLoad = userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
             ? yield getStackedAreaGraph({
                 label: 'CPU Load (%)',
@@ -6490,67 +6300,41 @@ function reportWorkflowMetrics() {
         if (diskIORead && diskIOWrite) {
             postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
-        if (hyperfineCommand.duration) {
-            postContentItems.push('### Performance Statistics', `Executing duration: ${hyperfineCommand.duration}s`);
+        if (testJob) {
+            const duration = Math.round((new Date(testJob.started_at).getTime() - new Date(testJob.completed_at).getTime()) / 1000);
+            postContentItems.push('### Performance Statistics', `Executing duration: ${duration}s`);
             const tableContent = [];
             tableContent.push(['Domain', 'MaxValue', 'AvgValue']);
             if (cpuTableContent && cpuTableContent.length) {
-                tableContent.push(cpuTableContent);
+                tableContent.push(...cpuTableContent);
             }
             if (memoryTableContent && memoryTableContent.length) {
-                tableContent.push(memoryTableContent);
+                tableContent.push(...memoryTableContent);
             }
             if (networkTableContent && networkTableContent.length) {
-                tableContent.push(networkTableContent);
+                tableContent.push(...networkTableContent);
             }
             if (diskTableContent && diskTableContent.length) {
-                tableContent.push(diskTableContent);
+                tableContent.push(...diskTableContent);
             }
             postContentItems.push((0, markdown_table_1.markdownTable)(tableContent));
         }
         return postContentItems.join('\n');
     });
 }
-const PROC_TRACER_OUTPUT_FILE_NAME = 'proc-trace.out';
-// konpeki622: get command used hyperfine
-function getHyperfineCommand() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const procTraceOutFilePath = path_1.default.join(__dirname, '../proc-tracer', PROC_TRACER_OUTPUT_FILE_NAME);
-        logger.info(`Getting process tracer result from file ${procTraceOutFilePath} ...`);
-        let procTraceMinDuration = -1;
-        const procTraceMinDurationInput = core.getInput('proc_trace_min_duration');
-        if (procTraceMinDurationInput) {
-            const minProcDurationVal = parseInt(procTraceMinDurationInput);
-            if (Number.isInteger(minProcDurationVal)) {
-                procTraceMinDuration = minProcDurationVal;
-            }
-        }
-        const procTraceSysEnable = core.getInput('proc_trace_sys_enable') === 'true';
-        const completedCommands = yield (0, procTraceParser_1.parse)(procTraceOutFilePath, {
-            minDuration: procTraceMinDuration,
-            traceSystemProcesses: procTraceSysEnable
-        });
-        return completedCommands.find(command => command.name === 'hyperfine');
-    });
-}
-// konpeki622: add cpu table content
-function getCPUStats(hyperfineCommand) {
+// @konpeki622: add cpu table content
+function getCPUStats(testJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const userLoadX = [];
         const systemLoadX = [];
         const cpuTableContent = [];
-        if (!hyperfineCommand) {
-            logger.error(`Failed to get hyperfine command.`);
-            return { userLoadX, systemLoadX, cpuTableContent };
-        }
         logger.debug('Getting CPU stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/cpu`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = hyperfineCommand.startTime;
-        const duration = hyperfineCommand.duration;
-        const endTime = hyperfineCommand.startTime + duration;
+        const startTime = new Date(testJob.started_at).getTime();
+        const endTime = new Date(testJob.completed_at).getTime();
         let maxUserValue = 0;
         let sumUserValue = 0;
         let maxSystemValue = 0;
@@ -6576,28 +6360,23 @@ function getCPUStats(hyperfineCommand) {
             sumSystemValue += systemLoad;
             ++times;
         });
-        cpuTableContent.push('CPU(user)', `${maxUserValue.toFixed(2)}%`, `${(sumUserValue / times).toFixed(2)}%`);
-        cpuTableContent.push('CPU(sys)', `${maxSystemValue.toFixed(2)}%`, `${(sumSystemValue / times).toFixed(2)}%`);
+        cpuTableContent.push(['CPU(user)', `${maxUserValue.toFixed(2)}%`, `${(sumUserValue / times).toFixed(2)}%`]);
+        cpuTableContent.push(['CPU(sys)', `${maxSystemValue.toFixed(2)}%`, `${(sumSystemValue / times).toFixed(2)}%`]);
         return { userLoadX, systemLoadX, cpuTableContent };
     });
 }
-// konpeki622: add memory table content
-function getMemoryStats(hyperfineCommand) {
+// @konpeki622: add memory table content
+function getMemoryStats(testJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const activeMemoryX = [];
         const memoryTableContent = [];
-        if (!hyperfineCommand) {
-            logger.error(`Failed to get hyperfine command.`);
-            return { activeMemoryX, memoryTableContent };
-        }
         logger.debug('Getting memory stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/memory`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = hyperfineCommand.startTime;
-        const duration = hyperfineCommand.duration;
-        const endTime = hyperfineCommand.startTime + duration;
+        const startTime = new Date(testJob.started_at).getTime();
+        const endTime = new Date(testJob.completed_at).getTime();
         let maxUsedValue = 0;
         let sumUsedValue = 0;
         let totalMemoryMb = 0;
@@ -6618,28 +6397,23 @@ function getMemoryStats(hyperfineCommand) {
             sumTotalMemoryMb += totalMemoryMb;
             ++times;
         });
-        memoryTableContent.push('Memory', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%)`);
+        memoryTableContent.push(['Memory', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%)`]);
         return { activeMemoryX, memoryTableContent };
     });
 }
-// konpeki622: add network table content
-function getNetworkStats(hyperfineCommand) {
+// @konpeki622: add network table content
+function getNetworkStats(testJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const networkReadX = [];
         const networkWriteX = [];
         const networkTableContent = [];
-        if (!hyperfineCommand) {
-            logger.error(`Failed to get hyperfine command.`);
-            return { networkReadX, networkWriteX, networkTableContent };
-        }
         logger.debug('Getting network stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/network`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got network stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = hyperfineCommand.startTime;
-        const duration = hyperfineCommand.duration;
-        const endTime = hyperfineCommand.startTime + duration;
+        const startTime = new Date(testJob.started_at).getTime();
+        const endTime = new Date(testJob.completed_at).getTime();
         let maxReadValue = 0;
         let maxWriteValue = 0;
         let times = 0;
@@ -6661,13 +6435,13 @@ function getNetworkStats(hyperfineCommand) {
             maxWriteValue = Math.max(maxWriteValue, element.txMb);
             ++times;
         });
-        networkTableContent.push('Network I/O Read', `${maxReadValue.toFixed(2)}M`, '-');
-        networkTableContent.push('Network I/O Write', `${maxWriteValue.toFixed(2)}M`, '-');
+        networkTableContent.push(['Network I/O Read', `${maxReadValue.toFixed(2)}M`, '-']);
+        networkTableContent.push(['Network I/O Write', `${maxWriteValue.toFixed(2)}M`, '-']);
         return { networkReadX, networkWriteX, networkTableContent };
     });
 }
-// konpeki622: add disk table content
-function getDiskStats(hyperfineCommand) {
+// @konpeki622: add disk table content
+function getDiskStats(testJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const diskReadX = [];
         const diskWriteX = [];
@@ -6677,9 +6451,8 @@ function getDiskStats(hyperfineCommand) {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = hyperfineCommand.startTime;
-        const duration = hyperfineCommand.duration;
-        const endTime = hyperfineCommand.startTime + duration;
+        const startTime = new Date(testJob.started_at).getTime();
+        const endTime = new Date(testJob.completed_at).getTime();
         let maxReadValue = 0;
         let maxWriteValue = 0;
         let times = 0;
@@ -6701,8 +6474,8 @@ function getDiskStats(hyperfineCommand) {
             maxWriteValue = Math.max(maxWriteValue, element.wxMb);
             ++times;
         });
-        diskTableContent.push('Disk I/O Read', `${maxReadValue.toFixed(2)}M`, '-');
-        diskTableContent.push('Disk I/O Write', `${maxWriteValue.toFixed(2)}M`, '-');
+        diskTableContent.push(['Disk I/O Read', `${maxReadValue.toFixed(2)}M`, '-']);
+        diskTableContent.push(['Disk I/O Write', `${maxWriteValue.toFixed(2)}M`, '-']);
         return { diskReadX, diskWriteX, diskTableContent };
     });
 }
@@ -6813,11 +6586,15 @@ function finish(currentJob) {
     });
 }
 exports.finish = finish;
+// @konpeki622: transfer currentJob
 function report(currentJob) {
     return __awaiter(this, void 0, void 0, function* () {
         logger.info(`Reporting stat collector result ...`);
+        if (!currentJob) {
+            return null;
+        }
         try {
-            const postContent = yield reportWorkflowMetrics();
+            const postContent = yield reportWorkflowMetrics(currentJob);
             logger.info(`Reported stat collector result`);
             return postContent;
         }
@@ -10690,14 +10467,6 @@ module.exports = require("os");;
 
 "use strict";
 module.exports = require("path");;
-
-/***/ }),
-
-/***/ 1058:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("readline");;
 
 /***/ }),
 
