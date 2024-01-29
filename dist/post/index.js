@@ -32188,7 +32188,7 @@ function reportWorkflowMetrics(job) {
             postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
         if (validJob.started_at && validJob.completed_at) {
-            const duration = Math.round((new Date(validJob.started_at).getTime() - new Date(validJob.completed_at).getTime()) / 1000);
+            const duration = Math.round((new Date(validJob.completed_at).getTime() - new Date(validJob.started_at).getTime()) / 1000);
             postContentItems.push('### Performance Statistics', `Executing duration: ${duration}s`);
             const tableContent = [];
             tableContent.push(['Domain', 'MaxValue', 'AvgValue']);

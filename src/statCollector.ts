@@ -187,7 +187,7 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
   }
 
   if (validJob.started_at && validJob.completed_at) {
-    const duration = Math.round((new Date(validJob.started_at).getTime() - new Date(validJob.completed_at).getTime()) / 1000)
+    const duration = Math.round((new Date(validJob.completed_at).getTime() - new Date(validJob.started_at).getTime()) / 1000)
     postContentItems.push(
       '### Performance Statistics',
       `Executing duration: ${duration}s`
