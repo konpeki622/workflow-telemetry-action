@@ -32056,6 +32056,7 @@ const axios_1 = __importDefault(__webpack_require__(1441));
 const core = __importStar(__webpack_require__(2186));
 const logger = __importStar(__webpack_require__(4636));
 const markdown_table_1 = __webpack_require__(1062);
+const procTraceParser_1 = __webpack_require__(9576);
 const STAT_SERVER_PORT = 7777;
 const BLACK = '#000000';
 const WHITE = '#FFFFFF';
@@ -32068,6 +32069,7 @@ function triggerStatCollect() {
         }
     });
 }
+// konpeki622: display `Performance Statistics`
 function reportWorkflowMetrics() {
     return __awaiter(this, void 0, void 0, function* () {
         const theme = core.getInput('theme', { required: false });
@@ -32082,10 +32084,18 @@ function reportWorkflowMetrics() {
             default:
                 core.warning(`Invalid theme: ${theme}`);
         }
-        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats();
-        const { activeMemoryX, availableMemoryX, memoryTableContent } = yield getMemoryStats();
-        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats();
-        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats();
+        const hyperfineCommand = yield getHyperfineCommand();
+        if (!hyperfineCommand) {
+            logger.error(`Failed to get hyperfine command.`);
+            return '';
+        }
+        if (logger.isDebugEnabled()) {
+            logger.debug(JSON.stringify(hyperfineCommand));
+        }
+        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats(hyperfineCommand);
+        const { activeMemoryX, memoryTableContent } = yield getMemoryStats(hyperfineCommand);
+        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats(hyperfineCommand);
+        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats(hyperfineCommand);
         const cpuLoad = userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
             ? yield getStackedAreaGraph({
                 label: 'CPU Load (%)',
@@ -32105,9 +32115,7 @@ function reportWorkflowMetrics() {
             })
             : null;
         const memoryUsage = activeMemoryX &&
-            activeMemoryX.length &&
-            availableMemoryX &&
-            availableMemoryX.length
+            activeMemoryX.length
             ? yield getStackedAreaGraph({
                 label: 'Memory Usage (MB)',
                 axisColor,
@@ -32116,11 +32124,6 @@ function reportWorkflowMetrics() {
                         label: 'Used',
                         color: '#377eb899',
                         points: activeMemoryX
-                    },
-                    {
-                        label: 'Free',
-                        color: '#4daf4a99',
-                        points: availableMemoryX
                     }
                 ]
             })
@@ -32173,14 +32176,8 @@ function reportWorkflowMetrics() {
         if (cpuLoad) {
             postContentItems.push('### CPU Metrics', `![${cpuLoad.id}](${cpuLoad.url})`, '');
         }
-        if (cpuTableContent) {
-            postContentItems.push((0, markdown_table_1.markdownTable)(cpuTableContent));
-        }
         if (memoryUsage) {
             postContentItems.push('### Memory Metrics', `![${memoryUsage.id}](${memoryUsage.url})`, '');
-        }
-        if (memoryTableContent) {
-            postContentItems.push((0, markdown_table_1.markdownTable)(memoryTableContent));
         }
         if ((networkIORead && networkIOWrite) || (diskIORead && diskIOWrite)) {
             postContentItems.push('### IO Metrics', '|               | Read      | Write     |', '|---            |---        |---        |');
@@ -32191,34 +32188,75 @@ function reportWorkflowMetrics() {
         if (diskIORead && diskIOWrite) {
             postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
-        if (networkTableContent) {
-            postContentItems.push('### Network I/O details', (0, markdown_table_1.markdownTable)(networkTableContent));
-        }
-        if (diskTableContent) {
-            postContentItems.push('### Disk I/O details', (0, markdown_table_1.markdownTable)(diskTableContent));
+        if (hyperfineCommand.duration) {
+            postContentItems.push('### Performance Statistics', `Executing duration: ${hyperfineCommand.duration}s`);
+            const tableContent = [];
+            tableContent.push(['Domain', 'MaxValue', 'AvgValue']);
+            if (cpuTableContent && cpuTableContent.length) {
+                tableContent.push(cpuTableContent);
+            }
+            if (memoryTableContent && memoryTableContent.length) {
+                tableContent.push(memoryTableContent);
+            }
+            if (networkTableContent && networkTableContent.length) {
+                tableContent.push(networkTableContent);
+            }
+            if (diskTableContent && diskTableContent.length) {
+                tableContent.push(diskTableContent);
+            }
+            postContentItems.push((0, markdown_table_1.markdownTable)(tableContent));
         }
         return postContentItems.join('\n');
     });
 }
-function getCPUStats() {
+const PROC_TRACER_OUTPUT_FILE_NAME = 'proc-trace.out';
+// konpeki622: get command used hyperfine
+function getHyperfineCommand() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const procTraceOutFilePath = path_1.default.join(__dirname, '../proc-tracer', PROC_TRACER_OUTPUT_FILE_NAME);
+        logger.info(`Getting process tracer result from file ${procTraceOutFilePath} ...`);
+        let procTraceMinDuration = -1;
+        const procTraceMinDurationInput = core.getInput('proc_trace_min_duration');
+        if (procTraceMinDurationInput) {
+            const minProcDurationVal = parseInt(procTraceMinDurationInput);
+            if (Number.isInteger(minProcDurationVal)) {
+                procTraceMinDuration = minProcDurationVal;
+            }
+        }
+        const procTraceSysEnable = core.getInput('proc_trace_sys_enable') === 'true';
+        const completedCommands = yield (0, procTraceParser_1.parse)(procTraceOutFilePath, {
+            minDuration: procTraceMinDuration,
+            traceSystemProcesses: procTraceSysEnable
+        });
+        return completedCommands.find(command => command.name === 'hyperfine');
+    });
+}
+// konpeki622: add cpu table content
+function getCPUStats(hyperfineCommand) {
     return __awaiter(this, void 0, void 0, function* () {
         const userLoadX = [];
         const systemLoadX = [];
         const cpuTableContent = [];
+        if (!hyperfineCommand) {
+            logger.error(`Failed to get hyperfine command.`);
+            return { userLoadX, systemLoadX, cpuTableContent };
+        }
         logger.debug('Getting CPU stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/cpu`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
-        let startTime = 0;
+        const startTime = hyperfineCommand.startTime;
+        const duration = hyperfineCommand.duration;
+        const endTime = hyperfineCommand.startTime + duration;
         let maxUserValue = 0;
         let sumUserValue = 0;
         let maxSystemValue = 0;
         let sumSystemValue = 0;
-        cpuTableContent.push(['Time', 'Value(user)', 'Value(system)']); // header
-        response.data.forEach((element, index) => {
-            if (index === 0) {
-                startTime = element.time;
+        let times = 0;
+        response.data.forEach((element) => {
+            if (element.time < startTime || element.time > endTime) {
+                return true;
             }
             const userLoad = element.userLoad && element.userLoad > 0 ? element.userLoad : 0;
             userLoadX.push({
@@ -32234,74 +32272,78 @@ function getCPUStats() {
             });
             maxSystemValue = Math.max(maxSystemValue, element.systemLoad);
             sumSystemValue += systemLoad;
-            const currentTime = Math.round((element.time - startTime) / 1000).toString();
-            cpuTableContent.push([`${currentTime}s`, `${userLoad.toFixed(2)}%`, `${systemLoad.toFixed(2)}%`]);
+            ++times;
         });
-        cpuTableContent.push(['**Max**', `**${maxUserValue.toFixed(2)}%**`, `**${maxSystemValue.toFixed(2)}%**`]);
-        cpuTableContent.push(['**Avg**', `**${(sumUserValue / response.data.length).toFixed(2)}%**`, `**${(sumSystemValue / response.data.length).toFixed(2)}%**`]);
+        cpuTableContent.push('CPU(user)', `${maxUserValue.toFixed(2)}%`, `${(sumUserValue / times).toFixed(2)}%`);
+        cpuTableContent.push('CPU(sys)', `${maxSystemValue.toFixed(2)}%`, `${(sumSystemValue / times).toFixed(2)}%`);
         return { userLoadX, systemLoadX, cpuTableContent };
     });
 }
-function getMemoryStats() {
+// konpeki622: add memory table content
+function getMemoryStats(hyperfineCommand) {
     return __awaiter(this, void 0, void 0, function* () {
         const activeMemoryX = [];
-        const availableMemoryX = [];
         const memoryTableContent = [];
+        if (!hyperfineCommand) {
+            logger.error(`Failed to get hyperfine command.`);
+            return { activeMemoryX, memoryTableContent };
+        }
         logger.debug('Getting memory stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/memory`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`);
         }
-        let startTime = 0;
+        const startTime = hyperfineCommand.startTime;
+        const duration = hyperfineCommand.duration;
+        const endTime = hyperfineCommand.startTime + duration;
         let maxUsedValue = 0;
         let sumUsedValue = 0;
         let totalMemoryMb = 0;
         let sumTotalMemoryMb = 0; // to calculate average value
-        memoryTableContent.push(['Time', 'Usage', 'Percentage']); // header
+        let times = 0;
         response.data.forEach((element, index) => {
-            if (index === 0) {
-                startTime = element.time;
+            if (element.time < startTime || element.time > endTime) {
+                return true;
             }
             const activeMemoryMb = element.activeMemoryMb && element.activeMemoryMb > 0 ? element.activeMemoryMb : 0;
             activeMemoryX.push({
                 x: element.time,
                 y: activeMemoryMb
             });
-            availableMemoryX.push({
-                x: element.time,
-                y: element.availableMemoryMb && element.availableMemoryMb > 0
-                    ? element.availableMemoryMb
-                    : 0
-            });
             maxUsedValue = Math.max(maxUsedValue, activeMemoryMb);
             sumUsedValue += activeMemoryMb;
             totalMemoryMb = Math.max(totalMemoryMb, element.totalMemoryMb);
             sumTotalMemoryMb += totalMemoryMb;
-            const currentTime = Math.round((element.time - startTime) / 1000).toString();
-            memoryTableContent.push([`${currentTime}s`, `${activeMemoryMb.toFixed(2)}M`, `${(activeMemoryMb / element.totalMemoryMb).toFixed(2)}%`]);
+            ++times;
         });
-        memoryTableContent.push(['**Max**', `**${maxUsedValue.toFixed(2)}M**`, `**${(maxUsedValue / totalMemoryMb).toFixed(2)}%**`]);
-        memoryTableContent.push(['**Avg**', `**${(sumUsedValue / response.data.length).toFixed(2)}M**`, `**${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%**`]);
-        return { activeMemoryX, availableMemoryX, memoryTableContent };
+        memoryTableContent.push('Memory', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%)`);
+        return { activeMemoryX, memoryTableContent };
     });
 }
-function getNetworkStats() {
+// konpeki622: add network table content
+function getNetworkStats(hyperfineCommand) {
     return __awaiter(this, void 0, void 0, function* () {
         const networkReadX = [];
         const networkWriteX = [];
         const networkTableContent = [];
+        if (!hyperfineCommand) {
+            logger.error(`Failed to get hyperfine command.`);
+            return { networkReadX, networkWriteX, networkTableContent };
+        }
         logger.debug('Getting network stats ...');
         const response = yield axios_1.default.get(`http://localhost:${STAT_SERVER_PORT}/network`);
         if (logger.isDebugEnabled()) {
             logger.debug(`Got network stats: ${JSON.stringify(response.data)}`);
         }
-        let startTime = 0;
+        const startTime = hyperfineCommand.startTime;
+        const duration = hyperfineCommand.duration;
+        const endTime = hyperfineCommand.startTime + duration;
         let maxReadValue = 0;
         let maxWriteValue = 0;
-        networkTableContent.push(['Time', 'Read', 'Write']); // header
+        let times = 0;
         response.data.forEach((element, index) => {
-            if (index === 0) {
-                startTime = element.time;
+            if (element.time < startTime || element.time > endTime) {
+                return true;
             }
             const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0;
             networkReadX.push({
@@ -32315,14 +32357,15 @@ function getNetworkStats() {
             });
             maxReadValue = Math.max(maxReadValue, element.rxMb);
             maxWriteValue = Math.max(maxWriteValue, element.txMb);
-            const currentTime = Math.round((element.time - startTime) / 1000).toString();
-            networkTableContent.push([`${currentTime}s`, `${rxMb.toFixed(2)}M`, `${txMb.toFixed(2)}M`]);
+            ++times;
         });
-        networkTableContent.push(['**Max**', `**${maxReadValue.toFixed(2)}M**`, `**${maxWriteValue.toFixed(2)}M**`]);
+        networkTableContent.push('Network I/O Read', `${maxReadValue.toFixed(2)}M`, '-');
+        networkTableContent.push('Network I/O Write', `${maxWriteValue.toFixed(2)}M`, '-');
         return { networkReadX, networkWriteX, networkTableContent };
     });
 }
-function getDiskStats() {
+// konpeki622: add disk table content
+function getDiskStats(hyperfineCommand) {
     return __awaiter(this, void 0, void 0, function* () {
         const diskReadX = [];
         const diskWriteX = [];
@@ -32332,13 +32375,15 @@ function getDiskStats() {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`);
         }
-        let startTime = 0;
+        const startTime = hyperfineCommand.startTime;
+        const duration = hyperfineCommand.duration;
+        const endTime = hyperfineCommand.startTime + duration;
         let maxReadValue = 0;
         let maxWriteValue = 0;
-        diskTableContent.push(['Time', 'Read', 'Write']); // header
+        let times = 0;
         response.data.forEach((element, index) => {
-            if (index === 0) {
-                startTime = element.time;
+            if (element.time < startTime || element.time > endTime) {
+                return true;
             }
             const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0;
             diskReadX.push({
@@ -32352,10 +32397,10 @@ function getDiskStats() {
             });
             maxReadValue = Math.max(maxReadValue, element.rxMb);
             maxWriteValue = Math.max(maxWriteValue, element.wxMb);
-            const currentTime = Math.round((element.time - startTime) / 1000).toString();
-            diskTableContent.push([`${currentTime}s`, `${rxMb.toFixed(2)}M`, `${wxMb.toFixed(2)}M`]);
+            ++times;
         });
-        diskTableContent.push(['**Max**', `**${maxReadValue.toFixed(2)}M**`, `**${maxWriteValue.toFixed(2)}M**`]);
+        diskTableContent.push('Disk I/O Read', `${maxReadValue.toFixed(2)}M`, '-');
+        diskTableContent.push('Disk I/O Write', `${maxWriteValue.toFixed(2)}M`, '-');
         return { diskReadX, diskWriteX, diskTableContent };
     });
 }
