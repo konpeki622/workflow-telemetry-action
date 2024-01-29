@@ -22294,6 +22294,7 @@ const markdown_table_1 = __webpack_require__(1062);
 const STAT_SERVER_PORT = 7777;
 const BLACK = '#000000';
 const WHITE = '#FFFFFF';
+const VALID_JOB_NAME = 'Run test';
 function triggerStatCollect() {
     return __awaiter(this, void 0, void 0, function* () {
         logger.debug('Triggering stat collect ...');
@@ -22307,11 +22308,12 @@ function triggerStatCollect() {
 function reportWorkflowMetrics(job) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
-        const testJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === 'Run test');
-        if (!testJob) {
-            logger.error('No test Job.');
+        const validJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at);
+        if (!validJob) {
+            logger.error('No valid Job.');
             return '';
         }
+        logger.debug(`test job ===> ${JSON.stringify(validJob)}`);
         const theme = core.getInput('theme', { required: false });
         let axisColor = BLACK;
         switch (theme) {
@@ -22324,10 +22326,10 @@ function reportWorkflowMetrics(job) {
             default:
                 core.warning(`Invalid theme: ${theme}`);
         }
-        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats(testJob);
-        const { activeMemoryX, memoryTableContent } = yield getMemoryStats(testJob);
-        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats(testJob);
-        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats(testJob);
+        const { userLoadX, systemLoadX, cpuTableContent } = yield getCPUStats(validJob);
+        const { activeMemoryX, memoryTableContent } = yield getMemoryStats(validJob);
+        const { networkReadX, networkWriteX, networkTableContent } = yield getNetworkStats(validJob);
+        const { diskReadX, diskWriteX, diskTableContent } = yield getDiskStats(validJob);
         const cpuLoad = userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
             ? yield getStackedAreaGraph({
                 label: 'CPU Load (%)',
@@ -22420,8 +22422,8 @@ function reportWorkflowMetrics(job) {
         if (diskIORead && diskIOWrite) {
             postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
-        if (testJob) {
-            const duration = Math.round((new Date(testJob.started_at).getTime() - new Date(testJob.completed_at).getTime()) / 1000);
+        if (validJob.started_at && validJob.completed_at) {
+            const duration = Math.round((new Date(validJob.started_at).getTime() - new Date(validJob.completed_at).getTime()) / 1000);
             postContentItems.push('### Performance Statistics', `Executing duration: ${duration}s`);
             const tableContent = [];
             tableContent.push(['Domain', 'MaxValue', 'AvgValue']);
@@ -22443,7 +22445,7 @@ function reportWorkflowMetrics(job) {
     });
 }
 // @konpeki622: add cpu table content
-function getCPUStats(testJob) {
+function getCPUStats(validJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const userLoadX = [];
         const systemLoadX = [];
@@ -22453,8 +22455,8 @@ function getCPUStats(testJob) {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = new Date(testJob.started_at).getTime();
-        const endTime = new Date(testJob.completed_at).getTime();
+        const startTime = new Date(validJob.started_at).getTime();
+        const endTime = new Date(validJob.completed_at).getTime();
         let maxUserValue = 0;
         let sumUserValue = 0;
         let maxSystemValue = 0;
@@ -22486,7 +22488,7 @@ function getCPUStats(testJob) {
     });
 }
 // @konpeki622: add memory table content
-function getMemoryStats(testJob) {
+function getMemoryStats(validJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const activeMemoryX = [];
         const memoryTableContent = [];
@@ -22495,8 +22497,8 @@ function getMemoryStats(testJob) {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = new Date(testJob.started_at).getTime();
-        const endTime = new Date(testJob.completed_at).getTime();
+        const startTime = new Date(validJob.started_at).getTime();
+        const endTime = new Date(validJob.completed_at).getTime();
         let maxUsedValue = 0;
         let sumUsedValue = 0;
         let totalMemoryMb = 0;
@@ -22522,7 +22524,7 @@ function getMemoryStats(testJob) {
     });
 }
 // @konpeki622: add network table content
-function getNetworkStats(testJob) {
+function getNetworkStats(validJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const networkReadX = [];
         const networkWriteX = [];
@@ -22532,8 +22534,8 @@ function getNetworkStats(testJob) {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got network stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = new Date(testJob.started_at).getTime();
-        const endTime = new Date(testJob.completed_at).getTime();
+        const startTime = new Date(validJob.started_at).getTime();
+        const endTime = new Date(validJob.completed_at).getTime();
         let maxReadValue = 0;
         let maxWriteValue = 0;
         let times = 0;
@@ -22561,7 +22563,7 @@ function getNetworkStats(testJob) {
     });
 }
 // @konpeki622: add disk table content
-function getDiskStats(testJob) {
+function getDiskStats(validJob) {
     return __awaiter(this, void 0, void 0, function* () {
         const diskReadX = [];
         const diskWriteX = [];
@@ -22571,8 +22573,8 @@ function getDiskStats(testJob) {
         if (logger.isDebugEnabled()) {
             logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`);
         }
-        const startTime = new Date(testJob.started_at).getTime();
-        const endTime = new Date(testJob.completed_at).getTime();
+        const startTime = new Date(validJob.started_at).getTime();
+        const endTime = new Date(validJob.completed_at).getTime();
         let maxReadValue = 0;
         let maxWriteValue = 0;
         let times = 0;

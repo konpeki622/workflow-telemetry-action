@@ -26,6 +26,8 @@ const STAT_SERVER_PORT = 7777
 const BLACK = '#000000'
 const WHITE = '#FFFFFF'
 
+const VALID_JOB_NAME = 'Run test'
+
 async function triggerStatCollect(): Promise<void> {
   logger.debug('Triggering stat collect ...')
   const response = await axios.post(
@@ -38,11 +40,12 @@ async function triggerStatCollect(): Promise<void> {
 
 // @konpeki622: display `Performance Statistics`
 async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
-  const testJob = job.steps?.find(step => step.name === 'Run test')
-  if (!testJob) {
-    logger.error('No test Job.')
+  const validJob: any = job.steps?.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at)
+  if (!validJob) {
+    logger.error('No valid Job.')
     return ''
   }
+  logger.debug(`test job ===> ${JSON.stringify(validJob)}`)
   
   const theme: string = core.getInput('theme', { required: false })
   let axisColor = BLACK
@@ -57,10 +60,10 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
       core.warning(`Invalid theme: ${theme}`)
   }
 
-  const { userLoadX, systemLoadX, cpuTableContent } = await getCPUStats(testJob)
-  const { activeMemoryX, memoryTableContent } = await getMemoryStats(testJob)
-  const { networkReadX, networkWriteX, networkTableContent } = await getNetworkStats(testJob)
-  const { diskReadX, diskWriteX, diskTableContent } = await getDiskStats(testJob)
+  const { userLoadX, systemLoadX, cpuTableContent } = await getCPUStats(validJob)
+  const { activeMemoryX, memoryTableContent } = await getMemoryStats(validJob)
+  const { networkReadX, networkWriteX, networkTableContent } = await getNetworkStats(validJob)
+  const { diskReadX, diskWriteX, diskTableContent } = await getDiskStats(validJob)
 
   const cpuLoad =
     userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
@@ -183,8 +186,8 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
     )
   }
 
-  if (testJob) {
-    const duration = Math.round((new Date(testJob.started_at!).getTime() - new Date(testJob.completed_at!).getTime()) / 1000)
+  if (validJob.started_at && validJob.completed_at) {
+    const duration = Math.round((new Date(validJob.started_at).getTime() - new Date(validJob.completed_at).getTime()) / 1000)
     postContentItems.push(
       '### Performance Statistics',
       `Executing duration: ${duration}s`
@@ -209,7 +212,7 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
 }
 
 // @konpeki622: add cpu table content
-async function getCPUStats(testJob: any): Promise<ProcessedCPUStats> {
+async function getCPUStats(validJob: any): Promise<ProcessedCPUStats> {
   const userLoadX: ProcessedStats[] = []
   const systemLoadX: ProcessedStats[] = []
   const cpuTableContent: string[][] = []
@@ -220,8 +223,8 @@ async function getCPUStats(testJob: any): Promise<ProcessedCPUStats> {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = new Date(testJob.started_at).getTime()
-  const endTime: number = new Date(testJob.completed_at!).getTime()
+  const startTime: number = new Date(validJob.started_at).getTime()
+  const endTime: number = new Date(validJob.completed_at).getTime()
 
   let maxUserValue: number = 0
   let sumUserValue: number = 0
@@ -259,7 +262,7 @@ async function getCPUStats(testJob: any): Promise<ProcessedCPUStats> {
 }
 
 // @konpeki622: add memory table content
-async function getMemoryStats(testJob: any): Promise<ProcessedMemoryStats> {
+async function getMemoryStats(validJob: any): Promise<ProcessedMemoryStats> {
   const activeMemoryX: ProcessedStats[] = []
   const memoryTableContent: string[][] = []
 
@@ -271,8 +274,8 @@ async function getMemoryStats(testJob: any): Promise<ProcessedMemoryStats> {
     logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = new Date(testJob.started_at).getTime()
-  const endTime: number = new Date(testJob.completed_at!).getTime()
+  const startTime: number = new Date(validJob.started_at).getTime()
+  const endTime: number = new Date(validJob.completed_at).getTime()
 
   let maxUsedValue: number = 0
   let sumUsedValue: number = 0
@@ -303,7 +306,7 @@ async function getMemoryStats(testJob: any): Promise<ProcessedMemoryStats> {
 }
 
 // @konpeki622: add network table content
-async function getNetworkStats(testJob: any): Promise<ProcessedNetworkStats> {
+async function getNetworkStats(validJob: any): Promise<ProcessedNetworkStats> {
   const networkReadX: ProcessedStats[] = []
   const networkWriteX: ProcessedStats[] = []
   const networkTableContent: string[][] = []
@@ -316,8 +319,8 @@ async function getNetworkStats(testJob: any): Promise<ProcessedNetworkStats> {
     logger.debug(`Got network stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = new Date(testJob.started_at).getTime()
-  const endTime: number = new Date(testJob.completed_at!).getTime()
+  const startTime: number = new Date(validJob.started_at).getTime()
+  const endTime: number = new Date(validJob.completed_at).getTime()
 
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
@@ -350,7 +353,7 @@ async function getNetworkStats(testJob: any): Promise<ProcessedNetworkStats> {
 }
 
 // @konpeki622: add disk table content
-async function getDiskStats(testJob: any): Promise<ProcessedDiskStats> {
+async function getDiskStats(validJob: any): Promise<ProcessedDiskStats> {
   const diskReadX: ProcessedStats[] = []
   const diskWriteX: ProcessedStats[] = []
   const diskTableContent: string[][] = []
@@ -361,8 +364,8 @@ async function getDiskStats(testJob: any): Promise<ProcessedDiskStats> {
     logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`)
   }
 
-  const startTime: number = new Date(testJob.started_at).getTime()
-  const endTime: number = new Date(testJob.completed_at!).getTime()
+  const startTime: number = new Date(validJob.started_at).getTime()
+  const endTime: number = new Date(validJob.completed_at).getTime()
 
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
