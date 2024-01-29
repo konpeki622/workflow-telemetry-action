@@ -3,6 +3,7 @@ import path from 'path'
 import axios from 'axios'
 import * as core from '@actions/core'
 import {
+  CompletedCommand,
   CPUStats,
   DiskStats,
   GraphResponse,
@@ -19,6 +20,7 @@ import {
 } from './interfaces'
 import * as logger from './logger'
 import { markdownTable } from 'markdown-table'
+import { parse } from './procTraceParser'
 
 const STAT_SERVER_PORT = 7777
 
@@ -35,6 +37,7 @@ async function triggerStatCollect(): Promise<void> {
   }
 }
 
+// konpeki622: display `Performance Statistics`
 async function reportWorkflowMetrics(): Promise<string> {
   const theme: string = core.getInput('theme', { required: false })
   let axisColor = BLACK
@@ -49,10 +52,19 @@ async function reportWorkflowMetrics(): Promise<string> {
       core.warning(`Invalid theme: ${theme}`)
   }
 
-  const { userLoadX, systemLoadX, cpuTableContent } = await getCPUStats()
-  const { activeMemoryX, memoryTableContent } = await getMemoryStats()
-  const { networkReadX, networkWriteX, networkTableContent } = await getNetworkStats()
-  const { diskReadX, diskWriteX, diskTableContent } = await getDiskStats()
+  const hyperfineCommand: CompletedCommand | undefined = await getHyperfineCommand()
+  if (!hyperfineCommand) {
+    logger.error(`Failed to get hyperfine command.`)
+    return ''
+  }
+  if (logger.isDebugEnabled()) {
+    logger.debug(JSON.stringify(hyperfineCommand))
+  }
+
+  const { userLoadX, systemLoadX, cpuTableContent } = await getCPUStats(hyperfineCommand)
+  const { activeMemoryX, memoryTableContent } = await getMemoryStats(hyperfineCommand)
+  const { networkReadX, networkWriteX, networkTableContent } = await getNetworkStats(hyperfineCommand)
+  const { diskReadX, diskWriteX, diskTableContent } = await getDiskStats(hyperfineCommand)
 
   const cpuLoad =
     userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
@@ -150,21 +162,11 @@ async function reportWorkflowMetrics(): Promise<string> {
       ''
     )
   }
-  if (cpuTableContent) {
-    postContentItems.push(
-      markdownTable(cpuTableContent)
-    )
-  }
   if (memoryUsage) {
     postContentItems.push(
       '### Memory Metrics',
       `![${memoryUsage.id}](${memoryUsage.url})`,
       ''
-    )
-  }
-  if (memoryTableContent) {
-    postContentItems.push(
-      markdownTable(memoryTableContent)
     )
   }
   if ((networkIORead && networkIOWrite) || (diskIORead && diskIOWrite)) {
@@ -184,25 +186,76 @@ async function reportWorkflowMetrics(): Promise<string> {
       `| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`
     )
   }
-  if (networkTableContent) {
+
+  if (hyperfineCommand.duration) {
     postContentItems.push(
-      '### Network I/O details',
-      markdownTable(networkTableContent)
+      '### Performance Statistics',
+      `Executing duration: ${hyperfineCommand.duration}s`
     )
-  }
-  if (diskTableContent) {
-    postContentItems.push(
-      '### Disk I/O details',
-      markdownTable(diskTableContent)
-    )
+    const tableContent: string[][] = []
+    tableContent.push(['Domain', 'MaxValue', 'AvgValue'])
+    if (cpuTableContent && cpuTableContent.length) {
+      tableContent.push(cpuTableContent)
+    }
+    if (memoryTableContent && memoryTableContent.length) {
+      tableContent.push(memoryTableContent)
+    }
+    if (networkTableContent && networkTableContent.length) {
+      tableContent.push(networkTableContent)
+    }
+    if (diskTableContent && diskTableContent.length) {
+      tableContent.push(diskTableContent)
+    }
+    postContentItems.push(markdownTable(tableContent))
   }
   return postContentItems.join('\n')
 }
 
-async function getCPUStats(): Promise<ProcessedCPUStats> {
+const PROC_TRACER_OUTPUT_FILE_NAME = 'proc-trace.out'
+
+// konpeki622: get command used hyperfine
+async function getHyperfineCommand(): Promise<CompletedCommand | undefined> {
+  const procTraceOutFilePath = path.join(
+    __dirname,
+    '../proc-tracer',
+    PROC_TRACER_OUTPUT_FILE_NAME
+  )
+
+  logger.info(
+    `Getting process tracer result from file ${procTraceOutFilePath} ...`
+  )
+
+  let procTraceMinDuration = -1
+  const procTraceMinDurationInput: string = core.getInput(
+    'proc_trace_min_duration'
+  )
+  if (procTraceMinDurationInput) {
+    const minProcDurationVal: number = parseInt(procTraceMinDurationInput)
+    if (Number.isInteger(minProcDurationVal)) {
+      procTraceMinDuration = minProcDurationVal
+    }
+  }
+  const procTraceSysEnable: boolean =
+      core.getInput('proc_trace_sys_enable') === 'true'
+  const completedCommands: CompletedCommand[] = await parse(
+    procTraceOutFilePath,
+    {
+      minDuration: procTraceMinDuration,
+      traceSystemProcesses: procTraceSysEnable
+    }
+  )
+  return completedCommands.find(command => command.name === 'hyperfine')
+}
+
+// konpeki622: add cpu table content
+async function getCPUStats(hyperfineCommand: CompletedCommand): Promise<ProcessedCPUStats> {
   const userLoadX: ProcessedStats[] = []
   const systemLoadX: ProcessedStats[] = []
-  const cpuTableContent: string[][] = []
+  const cpuTableContent: string[] = []
+  if (!hyperfineCommand) {
+    logger.error(`Failed to get hyperfine command.`)
+    return { userLoadX, systemLoadX, cpuTableContent }
+  }
 
   logger.debug('Getting CPU stats ...')
   const response = await axios.get(`http://localhost:${STAT_SERVER_PORT}/cpu`)
@@ -210,17 +263,21 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
 
-  let startTime: number = 0
+  const startTime: number = hyperfineCommand.startTime
+  const duration: number =  hyperfineCommand.duration
+  const endTime: number = hyperfineCommand.startTime + duration
+
   let maxUserValue: number = 0
   let sumUserValue: number = 0
   let maxSystemValue: number = 0
   let sumSystemValue: number = 0
+  let times: number = 0
 
-  cpuTableContent.push(['Time', 'Value(user)', 'Value(system)']) // header
-  response.data.forEach((element: CPUStats, index: number) => {
-    if (index === 0) {
-      startTime = element.time
+  response.data.forEach((element: CPUStats) => {
+    if (element.time < startTime || element.time > endTime) {
+      return true
     }
+
     const userLoad: number = element.userLoad && element.userLoad > 0 ? element.userLoad : 0
     userLoadX.push({
       x: element.time,
@@ -237,19 +294,22 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
 
     maxSystemValue = Math.max(maxSystemValue, element.systemLoad)
     sumSystemValue += systemLoad
-
-    const currentTime: string = Math.round((element.time - startTime) / 1000).toString()
-    cpuTableContent.push([`${currentTime}s`, `${userLoad.toFixed(2)}%`, `${systemLoad.toFixed(2)}%`])
+    ++times
   })
-  cpuTableContent.push(['**Max**', `**${maxUserValue.toFixed(2)}%**`, `**${maxSystemValue.toFixed(2)}%**`])
-  cpuTableContent.push(['**Avg**', `**${(sumUserValue / response.data.length).toFixed(2)}%**`, `**${(sumSystemValue / response.data.length).toFixed(2)}%**`])
+  cpuTableContent.push('CPU(user)', `${maxUserValue.toFixed(2)}%`, `${(sumUserValue / times).toFixed(2)}%`)
+  cpuTableContent.push('CPU(sys)', `${maxSystemValue.toFixed(2)}%`, `${(sumSystemValue / times).toFixed(2)}%`)
 
   return { userLoadX, systemLoadX, cpuTableContent }
 }
 
-async function getMemoryStats(): Promise<ProcessedMemoryStats> {
+// konpeki622: add memory table content
+async function getMemoryStats(hyperfineCommand: CompletedCommand): Promise<ProcessedMemoryStats> {
   const activeMemoryX: ProcessedStats[] = []
-  const memoryTableContent: string[][] = []
+  const memoryTableContent: string[] = []
+  if (!hyperfineCommand) {
+    logger.error(`Failed to get hyperfine command.`)
+    return { activeMemoryX, memoryTableContent }
+  }
 
   logger.debug('Getting memory stats ...')
   const response = await axios.get(
@@ -259,17 +319,21 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
     logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`)
   }
 
-  let startTime: number = 0
+  const startTime: number = hyperfineCommand.startTime
+  const duration: number =  hyperfineCommand.duration
+  const endTime: number = hyperfineCommand.startTime + duration
+
   let maxUsedValue: number = 0
   let sumUsedValue: number = 0
   let totalMemoryMb: number = 0
   let sumTotalMemoryMb: number = 0 // to calculate average value
+  let times: number = 0
 
-  memoryTableContent.push(['Time', 'Usage', 'Percentage']) // header
   response.data.forEach((element: MemoryStats, index: number) => {
-    if (index === 0) {
-      startTime = element.time
+    if (element.time < startTime || element.time > endTime) {
+      return true
     }
+
     const activeMemoryMb = element.activeMemoryMb && element.activeMemoryMb > 0 ? element.activeMemoryMb : 0
     activeMemoryX.push({
       x: element.time,
@@ -280,20 +344,22 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
     sumUsedValue += activeMemoryMb
     totalMemoryMb = Math.max(totalMemoryMb, element.totalMemoryMb)
     sumTotalMemoryMb += totalMemoryMb
-
-    const currentTime: string = Math.round((element.time - startTime) / 1000).toString()
-    memoryTableContent.push([`${currentTime}s`, `${activeMemoryMb.toFixed(2)}M`, `${(activeMemoryMb / element.totalMemoryMb).toFixed(2)}%`])
+    ++times
   })
-  memoryTableContent.push(['**Max**', `**${maxUsedValue.toFixed(2)}M**`, `**${(maxUsedValue / totalMemoryMb).toFixed(2)}%**`])
-  memoryTableContent.push(['**Avg**', `**${(sumUsedValue / response.data.length).toFixed(2)}M**`, `**${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%**`])
+  memoryTableContent.push('Memory', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%)`)
 
   return { activeMemoryX, memoryTableContent }
 }
 
-async function getNetworkStats(): Promise<ProcessedNetworkStats> {
+// konpeki622: add network table content
+async function getNetworkStats(hyperfineCommand: CompletedCommand): Promise<ProcessedNetworkStats> {
   const networkReadX: ProcessedStats[] = []
   const networkWriteX: ProcessedStats[] = []
-  const networkTableContent: string[][] = []
+  const networkTableContent: string[] = []
+  if (!hyperfineCommand) {
+    logger.error(`Failed to get hyperfine command.`)
+    return { networkReadX, networkWriteX, networkTableContent }
+  }
 
   logger.debug('Getting network stats ...')
   const response = await axios.get(
@@ -303,15 +369,19 @@ async function getNetworkStats(): Promise<ProcessedNetworkStats> {
     logger.debug(`Got network stats: ${JSON.stringify(response.data)}`)
   }
 
-  let startTime: number = 0
+  const startTime: number = hyperfineCommand.startTime
+  const duration: number =  hyperfineCommand.duration
+  const endTime: number = hyperfineCommand.startTime + duration
+
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
+  let times: number = 0
 
-  networkTableContent.push(['Time', 'Read', 'Write']) // header
   response.data.forEach((element: NetworkStats, index: number) => {
-    if (index === 0) {
-      startTime = element.time
+    if (element.time < startTime || element.time > endTime) {
+      return true
     }
+
     const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0
     networkReadX.push({
       x: element.time,
@@ -325,19 +395,19 @@ async function getNetworkStats(): Promise<ProcessedNetworkStats> {
 
     maxReadValue = Math.max(maxReadValue, element.rxMb)
     maxWriteValue = Math.max(maxWriteValue, element.txMb)
-
-    const currentTime: string = Math.round((element.time - startTime) / 1000).toString()
-    networkTableContent.push([`${currentTime}s`, `${rxMb.toFixed(2)}M`, `${txMb.toFixed(2)}M`])
+    ++times
   })
-  networkTableContent.push(['**Max**', `**${maxReadValue.toFixed(2)}M**`, `**${maxWriteValue.toFixed(2)}M**`])
+  networkTableContent.push('Network I/O Read', `${maxReadValue.toFixed(2)}M`, '-')
+  networkTableContent.push('Network I/O Write', `${maxWriteValue.toFixed(2)}M`, '-')
 
   return { networkReadX, networkWriteX, networkTableContent }
 }
 
-async function getDiskStats(): Promise<ProcessedDiskStats> {
+// konpeki622: add disk table content
+async function getDiskStats(hyperfineCommand: CompletedCommand): Promise<ProcessedDiskStats> {
   const diskReadX: ProcessedStats[] = []
   const diskWriteX: ProcessedStats[] = []
-  const diskTableContent: string[][] = []
+  const diskTableContent: string[] = []
 
   logger.debug('Getting disk stats ...')
   const response = await axios.get(`http://localhost:${STAT_SERVER_PORT}/disk`)
@@ -345,14 +415,17 @@ async function getDiskStats(): Promise<ProcessedDiskStats> {
     logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`)
   }
 
-  let startTime: number = 0
+  const startTime: number = hyperfineCommand.startTime
+  const duration: number =  hyperfineCommand.duration
+  const endTime: number = hyperfineCommand.startTime + duration
+
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
+  let times: number = 0
 
-  diskTableContent.push(['Time', 'Read', 'Write']) // header
   response.data.forEach((element: DiskStats, index: number) => {
-    if (index === 0) {
-      startTime = element.time
+    if (element.time < startTime || element.time > endTime) {
+      return true
     }
     const rxMb = element.rxMb && element.rxMb > 0 ? element.rxMb : 0
     diskReadX.push({
@@ -367,11 +440,10 @@ async function getDiskStats(): Promise<ProcessedDiskStats> {
 
     maxReadValue = Math.max(maxReadValue, element.rxMb)
     maxWriteValue = Math.max(maxWriteValue, element.wxMb)
-
-    const currentTime: string = Math.round((element.time - startTime) / 1000).toString()
-    diskTableContent.push([`${currentTime}s`, `${rxMb.toFixed(2)}M`, `${wxMb.toFixed(2)}M`])
+    ++times
   })
-  diskTableContent.push(['**Max**', `**${maxReadValue.toFixed(2)}M**`, `**${maxWriteValue.toFixed(2)}M**`])
+  diskTableContent.push('Disk I/O Read', `${maxReadValue.toFixed(2)}M`, '-')
+  diskTableContent.push('Disk I/O Write', `${maxWriteValue.toFixed(2)}M`, '-')
 
   return { diskReadX, diskWriteX, diskTableContent }
 }
