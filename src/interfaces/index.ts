@@ -42,7 +42,6 @@ export interface ProcessedCPUStats {
 
 export interface ProcessedMemoryStats {
   readonly activeMemoryX: ProcessedStats[]
-  readonly availableMemoryX: ProcessedStats[]
   readonly memoryTableContent: string[][]
 }
 

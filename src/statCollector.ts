@@ -50,7 +50,7 @@ async function reportWorkflowMetrics(): Promise<string> {
   }
 
   const { userLoadX, systemLoadX, cpuTableContent } = await getCPUStats()
-  const { activeMemoryX, availableMemoryX, memoryTableContent } = await getMemoryStats()
+  const { activeMemoryX, memoryTableContent } = await getMemoryStats()
   const { networkReadX, networkWriteX, networkTableContent } = await getNetworkStats()
   const { diskReadX, diskWriteX, diskTableContent } = await getDiskStats()
 
@@ -76,9 +76,7 @@ async function reportWorkflowMetrics(): Promise<string> {
 
   const memoryUsage =
     activeMemoryX &&
-    activeMemoryX.length &&
-    availableMemoryX &&
-    availableMemoryX.length
+    activeMemoryX.length
       ? await getStackedAreaGraph({
           label: 'Memory Usage (MB)',
           axisColor,
@@ -87,11 +85,6 @@ async function reportWorkflowMetrics(): Promise<string> {
               label: 'Used',
               color: '#377eb899',
               points: activeMemoryX
-            },
-            {
-              label: 'Free',
-              color: '#4daf4a99',
-              points: availableMemoryX
             }
           ]
         })
@@ -256,7 +249,6 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
 
 async function getMemoryStats(): Promise<ProcessedMemoryStats> {
   const activeMemoryX: ProcessedStats[] = []
-  const availableMemoryX: ProcessedStats[] = []
   const memoryTableContent: string[][] = []
 
   logger.debug('Getting memory stats ...')
@@ -284,14 +276,6 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
       y: activeMemoryMb
     })
 
-    availableMemoryX.push({
-      x: element.time,
-      y:
-        element.availableMemoryMb && element.availableMemoryMb > 0
-          ? element.availableMemoryMb
-          : 0
-    })
-
     maxUsedValue = Math.max(maxUsedValue, activeMemoryMb)
     sumUsedValue += activeMemoryMb
     totalMemoryMb = Math.max(totalMemoryMb, element.totalMemoryMb)
@@ -303,7 +287,7 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
   memoryTableContent.push(['**Max**', `**${maxUsedValue.toFixed(2)}M**`, `**${(maxUsedValue / totalMemoryMb).toFixed(2)}%**`])
   memoryTableContent.push(['**Avg**', `**${(sumUsedValue / response.data.length).toFixed(2)}M**`, `**${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%**`])
 
-  return { activeMemoryX, availableMemoryX, memoryTableContent }
+  return { activeMemoryX, memoryTableContent }
 }
 
 async function getNetworkStats(): Promise<ProcessedNetworkStats> {
