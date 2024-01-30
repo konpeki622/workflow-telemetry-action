@@ -3,7 +3,6 @@ import path from 'path'
 import axios from 'axios'
 import * as core from '@actions/core'
 import {
-  CompletedCommand,
   CPUStats,
   DiskStats,
   GraphResponse,
@@ -283,7 +282,7 @@ async function getMemoryStats(validJob: any): Promise<ProcessedMemoryStats> {
   let sumTotalMemoryMb: number = 0 // to calculate average value
   let times: number = 0
 
-  response.data.forEach((element: MemoryStats, index: number) => {
+  response.data.forEach((element: MemoryStats) => {
     if (element.time < startTime || element.time > endTime) {
       return true
     }
@@ -300,7 +299,7 @@ async function getMemoryStats(validJob: any): Promise<ProcessedMemoryStats> {
     sumTotalMemoryMb += totalMemoryMb
     ++times
   })
-  memoryTableContent.push(['Memory', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%)`])
+  memoryTableContent.push(['Memory Usage', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue * 100 / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue * 100 / sumTotalMemoryMb).toFixed(2)}%)`])
 
   return { activeMemoryX, memoryTableContent }
 }
@@ -324,9 +323,8 @@ async function getNetworkStats(validJob: any): Promise<ProcessedNetworkStats> {
 
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
-  let times: number = 0
 
-  response.data.forEach((element: NetworkStats, index: number) => {
+  response.data.forEach((element: NetworkStats) => {
     if (element.time < startTime || element.time > endTime) {
       return true
     }
@@ -344,7 +342,6 @@ async function getNetworkStats(validJob: any): Promise<ProcessedNetworkStats> {
 
     maxReadValue = Math.max(maxReadValue, element.rxMb)
     maxWriteValue = Math.max(maxWriteValue, element.txMb)
-    ++times
   })
   networkTableContent.push(['Network I/O Read', `${maxReadValue.toFixed(2)}M`, '-'])
   networkTableContent.push(['Network I/O Write', `${maxWriteValue.toFixed(2)}M`, '-'])
@@ -369,9 +366,8 @@ async function getDiskStats(validJob: any): Promise<ProcessedDiskStats> {
 
   let maxReadValue: number = 0
   let maxWriteValue: number = 0
-  let times: number = 0
 
-  response.data.forEach((element: DiskStats, index: number) => {
+  response.data.forEach((element: DiskStats) => {
     if (element.time < startTime || element.time > endTime) {
       return true
     }
@@ -388,7 +384,6 @@ async function getDiskStats(validJob: any): Promise<ProcessedDiskStats> {
 
     maxReadValue = Math.max(maxReadValue, element.rxMb)
     maxWriteValue = Math.max(maxWriteValue, element.wxMb)
-    ++times
   })
   diskTableContent.push(['Disk I/O Read', `${maxReadValue.toFixed(2)}M`, '-'])
   diskTableContent.push(['Disk I/O Write', `${maxWriteValue.toFixed(2)}M`, '-'])
