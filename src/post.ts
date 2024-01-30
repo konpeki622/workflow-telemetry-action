@@ -111,6 +111,7 @@ async function reportAll(
   logger.info(`Reporting all content completed`)
 }
 
+// @konpeki622: hide step and process charts
 async function run(): Promise<void> {
   try {
     logger.info(`Finishing ...`)
@@ -134,15 +135,11 @@ async function run(): Promise<void> {
     await processTracer.finish(currentJob)
 
     // Report step tracer
-    const stepTracerContent: string | null = await stepTracer.report(currentJob)
+    const stepTracerContent: string | null = null  // await stepTracer.report(currentJob)
     // Report stat collector
-    const stepCollectorContent: string | null = await statCollector.report(
-      currentJob
-    )
+    const stepCollectorContent: string | null = await statCollector.report(currentJob)
     // Report process tracer
-    const procTracerContent: string | null = await processTracer.report(
-      currentJob
-    )
+    const procTracerContent: string | null = null // await processTracer.report(currentJob)
 
     let allContent = ''
 
