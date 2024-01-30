@@ -22413,24 +22413,9 @@ function reportWorkflowMetrics(job) {
             })
             : null;
         const postContentItems = [];
-        if (cpuLoad) {
-            postContentItems.push('### CPU Metrics', `![${cpuLoad.id}](${cpuLoad.url})`, '');
-        }
-        if (memoryUsage) {
-            postContentItems.push('### Memory Metrics', `![${memoryUsage.id}](${memoryUsage.url})`, '');
-        }
-        if ((networkIORead && networkIOWrite) || (diskIORead && diskIOWrite)) {
-            postContentItems.push('### IO Metrics', '|               | Read      | Write     |', '|---            |---        |---        |');
-        }
-        if (networkIORead && networkIOWrite) {
-            postContentItems.push(`| Network I/O   | ![${networkIORead.id}](${networkIORead.url})        | ![${networkIOWrite.id}](${networkIOWrite.url})        |`);
-        }
-        if (diskIORead && diskIOWrite) {
-            postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
-        }
         if (validJob.started_at && validJob.completed_at) {
             const duration = Math.round((new Date(validJob.completed_at).getTime() - new Date(validJob.started_at).getTime()) / 1000);
-            postContentItems.push('### Performance Statistics', `Executing duration: ${duration}s`);
+            postContentItems.push('### Performance Statistics', `Executing duration: <u>${duration}s</u>`);
             const tableContent = [];
             tableContent.push(['Domain', 'MaxValue', 'AvgValue']);
             if (cpuTableContent && cpuTableContent.length) {
@@ -22446,6 +22431,21 @@ function reportWorkflowMetrics(job) {
                 tableContent.push(...diskTableContent);
             }
             postContentItems.push((0, markdown_table_1.markdownTable)(tableContent));
+        }
+        if (cpuLoad) {
+            postContentItems.push('### CPU Metrics', `![${cpuLoad.id}](${cpuLoad.url})`, '');
+        }
+        if (memoryUsage) {
+            postContentItems.push('### Memory Metrics', `![${memoryUsage.id}](${memoryUsage.url})`, '');
+        }
+        if ((networkIORead && networkIOWrite) || (diskIORead && diskIOWrite)) {
+            postContentItems.push('### IO Metrics', '|               | Read      | Write     |', '|---            |---        |---        |');
+        }
+        if (networkIORead && networkIOWrite) {
+            postContentItems.push(`| Network I/O   | ![${networkIORead.id}](${networkIORead.url})        | ![${networkIOWrite.id}](${networkIOWrite.url})        |`);
+        }
+        if (diskIORead && diskIOWrite) {
+            postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
         return postContentItems.join('\n');
     });
