@@ -159,6 +159,29 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
       : null
 
   const postContentItems: string[] = []
+
+  if (validJob.started_at && validJob.completed_at) {
+    const duration = Math.round((new Date(validJob.completed_at).getTime() - new Date(validJob.started_at).getTime()) / 1000)
+    postContentItems.push(
+      '### Performance Statistics',
+      `Executing duration: <u>${duration}s</u>`
+    )
+    const tableContent: string[][] = []
+    tableContent.push(['Domain', 'MaxValue', 'AvgValue'])
+    if (cpuTableContent && cpuTableContent.length) {
+      tableContent.push(...cpuTableContent)
+    }
+    if (memoryTableContent && memoryTableContent.length) {
+      tableContent.push(...memoryTableContent)
+    }
+    if (networkTableContent && networkTableContent.length) {
+      tableContent.push(...networkTableContent)
+    }
+    if (diskTableContent && diskTableContent.length) {
+      tableContent.push(...diskTableContent)
+    }
+    postContentItems.push(markdownTable(tableContent))
+  }
   if (cpuLoad) {
     postContentItems.push(
       '### CPU Metrics',
@@ -191,28 +214,6 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
     )
   }
 
-  if (validJob.started_at && validJob.completed_at) {
-    const duration = Math.round((new Date(validJob.completed_at).getTime() - new Date(validJob.started_at).getTime()) / 1000)
-    postContentItems.push(
-      '### Performance Statistics',
-      `Executing duration: ${duration}s`
-    )
-    const tableContent: string[][] = []
-    tableContent.push(['Domain', 'MaxValue', 'AvgValue'])
-    if (cpuTableContent && cpuTableContent.length) {
-      tableContent.push(...cpuTableContent)
-    }
-    if (memoryTableContent && memoryTableContent.length) {
-      tableContent.push(...memoryTableContent)
-    }
-    if (networkTableContent && networkTableContent.length) {
-      tableContent.push(...networkTableContent)
-    }
-    if (diskTableContent && diskTableContent.length) {
-      tableContent.push(...diskTableContent)
-    }
-    postContentItems.push(markdownTable(tableContent))
-  }
   return postContentItems.join('\n')
 }
 
