@@ -22295,6 +22295,7 @@ const STAT_SERVER_PORT = 7777;
 const BLACK = '#000000';
 const WHITE = '#FFFFFF';
 const VALID_JOB_NAME = 'Run test';
+const JOB_MAX_TRETRY_TIMES = 5;
 function triggerStatCollect() {
     return __awaiter(this, void 0, void 0, function* () {
         logger.debug('Triggering stat collect ...');
@@ -22308,7 +22309,12 @@ function triggerStatCollect() {
 function reportWorkflowMetrics(job) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
-        const validJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at);
+        let retryTimes = 0;
+        let validJob = null;
+        while (!validJob && retryTimes++ < JOB_MAX_TRETRY_TIMES) {
+            setTimeout(() => { }, 2000);
+            validJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at);
+        }
         if (!validJob) {
             logger.error('No valid Job.');
             return '';
@@ -22504,7 +22510,7 @@ function getMemoryStats(validJob) {
         let totalMemoryMb = 0;
         let sumTotalMemoryMb = 0; // to calculate average value
         let times = 0;
-        response.data.forEach((element, index) => {
+        response.data.forEach((element) => {
             if (element.time < startTime || element.time > endTime) {
                 return true;
             }
@@ -22519,7 +22525,7 @@ function getMemoryStats(validJob) {
             sumTotalMemoryMb += totalMemoryMb;
             ++times;
         });
-        memoryTableContent.push(['Memory', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue / sumTotalMemoryMb).toFixed(2)}%)`]);
+        memoryTableContent.push(['Memory Usage', `${maxUsedValue.toFixed(2)}M(${(maxUsedValue * 100 / totalMemoryMb).toFixed(2)}%)`, `${(sumUsedValue / times).toFixed(2)}M(${(sumUsedValue * 100 / sumTotalMemoryMb).toFixed(2)}%)`]);
         return { activeMemoryX, memoryTableContent };
     });
 }
@@ -22538,8 +22544,7 @@ function getNetworkStats(validJob) {
         const endTime = new Date(validJob.completed_at).getTime();
         let maxReadValue = 0;
         let maxWriteValue = 0;
-        let times = 0;
-        response.data.forEach((element, index) => {
+        response.data.forEach((element) => {
             if (element.time < startTime || element.time > endTime) {
                 return true;
             }
@@ -22555,7 +22560,6 @@ function getNetworkStats(validJob) {
             });
             maxReadValue = Math.max(maxReadValue, element.rxMb);
             maxWriteValue = Math.max(maxWriteValue, element.txMb);
-            ++times;
         });
         networkTableContent.push(['Network I/O Read', `${maxReadValue.toFixed(2)}M`, '-']);
         networkTableContent.push(['Network I/O Write', `${maxWriteValue.toFixed(2)}M`, '-']);
@@ -22577,8 +22581,7 @@ function getDiskStats(validJob) {
         const endTime = new Date(validJob.completed_at).getTime();
         let maxReadValue = 0;
         let maxWriteValue = 0;
-        let times = 0;
-        response.data.forEach((element, index) => {
+        response.data.forEach((element) => {
             if (element.time < startTime || element.time > endTime) {
                 return true;
             }
@@ -22594,7 +22597,6 @@ function getDiskStats(validJob) {
             });
             maxReadValue = Math.max(maxReadValue, element.rxMb);
             maxWriteValue = Math.max(maxWriteValue, element.wxMb);
-            ++times;
         });
         diskTableContent.push(['Disk I/O Read', `${maxReadValue.toFixed(2)}M`, '-']);
         diskTableContent.push(['Disk I/O Write', `${maxWriteValue.toFixed(2)}M`, '-']);
