@@ -43,7 +43,7 @@ async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
   let retryTimes = 0
   let validJob: any = null
   while (!validJob && retryTimes++ < JOB_MAX_RETRY_TIMES) {
-    setTimeout(() => {}, 2000)
+    await new Promise(r => setTimeout(r, 2000))
     validJob = job.steps?.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at)
   }
   if (!validJob) {
