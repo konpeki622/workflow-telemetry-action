@@ -6192,7 +6192,7 @@ function reportWorkflowMetrics(job) {
         let retryTimes = 0;
         let validJob = null;
         while (!validJob && retryTimes++ < JOB_MAX_RETRY_TIMES) {
-            setTimeout(() => { }, 2000);
+            yield new Promise(r => setTimeout(r, 2000));
             validJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at);
         }
         if (!validJob) {
