@@ -26,7 +26,7 @@ const BLACK = '#000000'
 const WHITE = '#FFFFFF'
 
 const VALID_JOB_NAME = 'Run test'
-const JOB_MAX_TRETRY_TIMES = 5
+const JOB_MAX_RETRY_TIMES = 900
 
 async function triggerStatCollect(): Promise<void> {
   logger.debug('Triggering stat collect ...')
@@ -42,7 +42,7 @@ async function triggerStatCollect(): Promise<void> {
 async function reportWorkflowMetrics(job: WorkflowJobType): Promise<string> {
   let retryTimes = 0
   let validJob: any = null
-  while (!validJob && retryTimes++ < JOB_MAX_TRETRY_TIMES) {
+  while (!validJob && retryTimes++ < JOB_MAX_RETRY_TIMES) {
     setTimeout(() => {}, 2000)
     validJob = job.steps?.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at)
   }
