@@ -22295,7 +22295,7 @@ const STAT_SERVER_PORT = 7777;
 const BLACK = '#000000';
 const WHITE = '#FFFFFF';
 const VALID_JOB_NAME = 'Run test';
-const JOB_MAX_TRETRY_TIMES = 5;
+const JOB_MAX_RETRY_TIMES = 900;
 function triggerStatCollect() {
     return __awaiter(this, void 0, void 0, function* () {
         logger.debug('Triggering stat collect ...');
@@ -22311,7 +22311,7 @@ function reportWorkflowMetrics(job) {
     return __awaiter(this, void 0, void 0, function* () {
         let retryTimes = 0;
         let validJob = null;
-        while (!validJob && retryTimes++ < JOB_MAX_TRETRY_TIMES) {
+        while (!validJob && retryTimes++ < JOB_MAX_RETRY_TIMES) {
             setTimeout(() => { }, 2000);
             validJob = (_a = job.steps) === null || _a === void 0 ? void 0 : _a.find(step => step.name === VALID_JOB_NAME && step.started_at && step.completed_at);
         }
